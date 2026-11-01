@@ -463,10 +463,10 @@ function render(){
 }
 
 function dupes(){
-  const g={};items.filter(i=>i.o).forEach(i=>(g[i.name]=g[i.name]||[]).push(i));
+  const g={};items.forEach(i=>(g[i.name]=g[i.name]||[]).push(i));
   return Object.values(g).flatMap(list=>{
     if(list.length<2)return [];
-    list.sort((a,b)=>(b.id.startsWith('orig-')-a.id.startsWith('orig-')));
+    list.sort((a,b)=>((b.id.startsWith('orig-')*2+(b.o?1:0))-(a.id.startsWith('orig-')*2+(a.o?1:0))));
     return list.slice(1);
   });
 }
