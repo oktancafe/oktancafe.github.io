@@ -143,7 +143,7 @@ footer .owner { margin-top: 18px; color: white; font-size: 15px; }
     <p>CAFE & RESTORAN</p>
 </header>
 
-<div id="adm-bar" hidden><button id="b-new">+ Yeni Ürün</button><button id="b-seed" hidden>Mevcut Menüyü Aktar</button><button id="b-dedupe" hidden>Eski ve Çift Kayıtları Temizle</button><button id="b-out">Çıkış</button></div>
+<div id="adm-bar" hidden><button id="b-new">+ Yeni Ürün</button><button id="b-reset">Menüyü Sıfırla</button><button id="b-out">Çıkış</button></div>
 
 <main class="container">
 
@@ -462,24 +462,12 @@ function render(){
   else menu.replaceChildren(...items.map(card));
 }
 
-function dupes(){
-  return [...dupesOnly(),...legacy];
-}
-function dupesOnly(){
-  const g={};items.forEach(i=>(g[i.name]=g[i.name]||[]).push(i));
-  return Object.values(g).flatMap(list=>{
-    if(list.length<2)return [];
-    list.sort((a,b)=>((b.id.startsWith('orig-')*2+(b.o?1:0))-(a.id.startsWith('orig-')*2+(a.o?1:0))));
-    return list.slice(1);
-  });
-}
 
 function ui(){
   $('#adm-wrap').hidden=admin;
   if(!loaded){$('#adm-bar').hidden=true;return}
   $('#adm-bar').hidden=!admin;
-  $('#b-seed').hidden=!admin||hasSeed();
-  $('#b-dedupe').hidden=!admin||!dupes().length;
+  $('#b-reset').hidden=!admin;
 }
 
 const modal=h=>{const m=$('#adm-modal');m.innerHTML='<div class="box">'+h+'</div>';m.hidden=false};
@@ -503,7 +491,12 @@ function form(it={}){
   };
 }
 
-async function del(it){if(confirm(it.name+' silinsin mi?'))await deleteDoc(doc(db,'items',it.id))}
+function ask(msg,yes){
+  modal(`<p style="margin:0">${msg}</p><button id="ask-y">Evet</button><button id="ask-n">Vazgeç</button>`);
+  $('#ask-y').onclick=()=>{close();yes()};
+  $('#ask-n').onclick=close;
+}
+function del(it){ask(it.name+' silinsin mi?',()=>deleteDoc(doc(db,'items',it.id)))}
 
 async function seed(){
   for(const s of stat) await setDoc(doc(db,'items','orig-'+s.order),{...s,o:1});
@@ -523,14 +516,19 @@ $('#l-s').onclick=async()=>{
   catch(e){$('#l-m').textContent='Kullanıcı adı veya şifre hatalı'}
 };
 $('#b-new').onclick=()=>form();
-$('#b-out').onclick=()=>signOut(auth);
-$('#b-dedupe').onclick=async()=>{
-  const d=dupes();
-  if(!d.length)return;
-  if(!confirm(d.length+' eski veya çift kayıt silinecek. Devam edilsin mi?'))return;
-  for(const it of d) await deleteDoc(doc(db,'items',it.id));
+$('#b-reset').onclick=()=>{
+  modal('<h3>Menüyü Sıfırla</h3><p>Bütün ürünler silinip bu sayfadaki menü yazılacak. Devam etmek için SIFIRLA yaz.</p><input id="rs-t" placeholder="SIFIRLA"><button id="rs-y">Onayla</button><button id="ask-n">Vazgeç</button>');
+  $('#ask-n').onclick=close;
+  $('#rs-y').onclick=async()=>{
+    if($('#rs-t').value.trim()!=='SIFIRLA'){$('#rs-t').value='';$('#rs-t').placeholder='Yanlış, SIFIRLA yaz';return}
+    close();
+    const snap=await getDocs(col);
+    for(const d of snap.docs) await deleteDoc(d.ref);
+    await seed();
+  };
 };
-$('#b-seed').onclick=async()=>{if(confirm('Mevcut menü veritabanına yazılsın mı?'))await seed()};
+
+$('#b-out').onclick=()=>signOut(auth);
 
 onAuthStateChanged(auth,u=>{admin=!!u;render();ui()});
 ui();
