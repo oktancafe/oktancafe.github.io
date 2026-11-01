@@ -439,7 +439,7 @@ const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=nu
 const stat=[...menu.children].map((c,i)=>({cat:c.dataset.category,name:c.querySelector('h3').textContent,desc:c.querySelector('p').textContent,price:c.querySelector('.price').textContent,img:c.querySelector('img').src,order:i}));
 let items=[],admin=false,once=false;
 
-function ui(){$('#adm-bar').hidden=!admin;$('#b-seed').hidden=items.length>0;$('#adm-wrap').hidden=admin}
+function ui(){$('#adm-bar').hidden=!admin;$('#b-seed').hidden=items.some(i=>i.o);$('#adm-wrap').hidden=admin}
 function render(){
  menu.replaceChildren(...items.map(it=>{
   const c=el('div','food-card');c.dataset.category=it.cat;
@@ -451,7 +451,7 @@ function render(){
 }
 async function load(){
  try{const s=await getDocs(query(col,orderBy('order')));items=s.docs.map(d=>({id:d.id,...d.data()}))}catch(e){return}
- if(items.length)once=true;if(once)render();ui();
+ once=items.some(i=>i.o);if(once)render();ui();
 }
 const modal=h=>{const m=$('#adm-modal');m.innerHTML='<div class="box">'+h+'</div>';m.hidden=false};
 const close=()=>{$('#adm-modal').hidden=true};
@@ -467,7 +467,7 @@ function form(it={}){
   $('#f-m').textContent='Kaydediliyor...';
   try{
    let img=it.img||'';const f=$('#f-i').files[0];if(f)img=await shrink(f);
-   const data={name,desc:$('#f-d').value.trim(),price:p+' TL',cat:$('#f-c').value,img,order:it.order??Date.now()};
+   const data={name,desc:$('#f-d').value.trim(),price:p+' TL',cat:$('#f-c').value,img,order:it.order??Date.now(),o:it.o||0};
    if(it.id)await setDoc(doc(db,'items',it.id),data);else await addDoc(col,data);
    close();await load();
   }catch(e){$('#f-m').textContent='Kaydedilemedi: '+(e.code||e.message)}
@@ -482,7 +482,7 @@ $('#l-s').onclick=async()=>{
 };
 $('#b-new').onclick=()=>form();
 $('#b-out').onclick=()=>signOut(auth);
-$('#b-seed').onclick=async()=>{if(confirm('Şimdiki menü veritabanına aktarılsın mı?')){for(const it of stat)await addDoc(col,it);await load()}};
+$('#b-seed').onclick=async()=>{if(confirm('Şimdiki menü veritabanına aktarılsın mı?')){for(const it of stat)await addDoc(col,{...it,o:1});await load()}};
 onAuthStateChanged(auth,u=>{admin=!!u;if(once)render();ui()});
 load();
 }else{document.getElementById('l-s').onclick=()=>{document.getElementById('l-m').textContent='Yönetici paneli henüz kurulmadı.'}}
