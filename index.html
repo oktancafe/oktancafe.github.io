@@ -143,7 +143,7 @@ footer .owner { margin-top: 18px; color: white; font-size: 15px; }
     <p>CAFE & RESTORAN</p>
 </header>
 
-<div id="adm-bar" hidden><button id="b-new">+ Yeni Ürün</button><button id="b-seed" hidden>Mevcut Menüyü Aktar</button><button id="b-out">Çıkış</button></div>
+<div id="adm-bar" hidden><button id="b-new">+ Yeni Ürün</button><button id="b-seed" hidden>Mevcut Menüyü Aktar</button><button id="b-dedupe" hidden>Çiftleri Temizle</button><button id="b-out">Çıkış</button></div>
 
 <main class="container">
 
@@ -462,10 +462,20 @@ function render(){
   else menu.replaceChildren(...items.map(card));
 }
 
+function dupes(){
+  const g={};items.filter(i=>i.o).forEach(i=>(g[i.name]=g[i.name]||[]).push(i));
+  return Object.values(g).flatMap(list=>{
+    if(list.length<2)return [];
+    list.sort((a,b)=>(b.id.startsWith('orig-')-a.id.startsWith('orig-')));
+    return list.slice(1);
+  });
+}
+
 function ui(){
   $('#adm-wrap').hidden=admin;
   $('#adm-bar').hidden=!admin;
   $('#b-seed').hidden=!admin||hasSeed();
+  $('#b-dedupe').hidden=!admin||!dupes().length;
 }
 
 const modal=h=>{const m=$('#adm-modal');m.innerHTML='<div class="box">'+h+'</div>';m.hidden=false};
@@ -507,6 +517,12 @@ $('#l-s').onclick=async()=>{
 };
 $('#b-new').onclick=()=>form();
 $('#b-out').onclick=()=>signOut(auth);
+$('#b-dedupe').onclick=async()=>{
+  const d=dupes();
+  if(!d.length)return;
+  if(!confirm(d.length+' çift kayıt silinecek. Devam edilsin mi?'))return;
+  for(const it of d) await deleteDoc(doc(db,'items',it.id));
+};
 $('#b-seed').onclick=async()=>{if(confirm('Mevcut menü veritabanına yazılsın mı?'))await seed()};
 
 onAuthStateChanged(auth,u=>{admin=!!u;render();ui()});
