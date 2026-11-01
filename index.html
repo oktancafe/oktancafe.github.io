@@ -427,65 +427,90 @@ footer .owner { margin-top: 18px; color: white; font-size: 15px; }
 <div id="adm-modal" hidden></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,collection,getDocs,addDoc,setDoc,deleteDoc,doc,query,orderBy} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,collection,onSnapshot,setDoc,addDoc,deleteDoc,doc,getDocs,query,orderBy} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const cfg={apiKey:"AIzaSyBZrisvoMohglhImvqIjpeI4VhHnl-8oD4",authDomain:"oktan-menu.firebaseapp.com",projectId:"oktan-menu",appId:"1:1086351041890:web:7d41358089b157afd3f83b"};
-if(cfg.apiKey){
-const $=s=>document.querySelector(s),menu=$('.menu');
+const $=s=>document.querySelector(s);
+const menu=$('.menu');
 const CATS={kahvalti:'Kahvaltı',anayemek:'Ana Yemekler',fastfood:'Fast Food',tatli:'Tatlılar',icecek:'İçecekler'};
 const db=getFirestore(initializeApp(cfg)),auth=getAuth(),col=collection(db,'items');
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
-const stat=[...menu.children].map((c,i)=>({cat:c.dataset.category,name:c.querySelector('h3').textContent,desc:c.querySelector('p').textContent,price:c.querySelector('.price').textContent,img:c.querySelector('img').src,order:i}));
-let items=[],admin=false,once=false;
 
-function ui(){$('#adm-bar').hidden=!admin;$('#b-seed').hidden=items.some(i=>i.o);$('#adm-wrap').hidden=admin}
-function render(){
- menu.replaceChildren(...items.map(it=>{
+const staticNodes=[...menu.children].map(c=>c.cloneNode(true));
+const stat=[...menu.children].map((c,i)=>({cat:c.dataset.category,name:c.querySelector('h3').textContent,desc:c.querySelector('p').textContent,price:c.querySelector('.price').textContent,img:c.querySelector('img').src,order:i}));
+
+let items=[],admin=false;
+const hasSeed=()=>items.some(i=>i.o);
+
+function card(it){
   const c=el('div','food-card');c.dataset.category=it.cat;
-  if(it.img){const i=el('img');i.src=it.img;i.alt=it.name;c.append(i)}else c.append(el('div','noimg','🍽️'));
-  const f=el('div','food-info');f.append(el('h3',0,it.name),el('p',0,it.desc),el('span','price',it.price));
-  if(admin){const b=el('div','adm-btns'),e=el('button',0,'Düzenle'),d=el('button',0,'Sil');
-   e.onclick=()=>form(it);d.onclick=()=>del(it);b.append(e,d);f.append(b)}
-  c.append(f);return c}));
+  if(it.img){const i=el('img');i.src=it.img;i.alt=it.name;i.referrerPolicy='no-referrer';c.append(i)}
+  else c.append(el('div','noimg','🍽️'));
+  const f=el('div','food-info');
+  f.append(el('h3',0,it.name),el('p',0,it.desc),el('span','price',it.price));
+  if(admin){
+    const b=el('div','adm-btns'),e=el('button',0,'Düzenle'),d=el('button',0,'Sil');
+    e.onclick=()=>form(it);d.onclick=()=>del(it);
+    b.append(e,d);f.append(b);
+  }
+  c.append(f);return c;
 }
-async function load(){
- try{const s=await getDocs(query(col,orderBy('order')));items=s.docs.map(d=>({id:d.id,...d.data()}))}catch(e){return}
- once=items.some(i=>i.o);if(once)render();ui();
+
+function render(){
+  if(!items.length) menu.replaceChildren(...staticNodes.map(n=>n.cloneNode(true)));
+  else menu.replaceChildren(...items.map(card));
 }
+
+function ui(){
+  $('#adm-wrap').hidden=admin;
+  $('#adm-bar').hidden=!admin;
+  $('#b-seed').hidden=!admin||hasSeed();
+}
+
 const modal=h=>{const m=$('#adm-modal');m.innerHTML='<div class="box">'+h+'</div>';m.hidden=false};
 const close=()=>{$('#adm-modal').hidden=true};
 const shrink=f=>new Promise(r=>{const i=new Image();i.onload=()=>{const k=Math.min(1,500/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);r(c.toDataURL('image/jpeg',.75))};i.src=URL.createObjectURL(f)});
 
 function form(it={}){
- modal(`<h3>${it.id?'Ürünü Düzenle':'Yeni Ürün'}</h3><input id="f-n" placeholder="Ürün adı"><input id="f-d" placeholder="Açıklama"><input id="f-p" type="number" placeholder="Fiyat (TL)"><select id="f-c">${Object.entries(CATS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><label>Fotoğraf (dikey olsun):<input id="f-i" type="file" accept="image/*"></label><p id="f-m"></p><button id="f-s">Kaydet</button><button id="f-x">Vazgeç</button>`);
- $('#f-n').value=it.name||'';$('#f-d').value=it.desc||'';$('#f-p').value=parseInt(it.price)||'';$('#f-c').value=it.cat||'kahvalti';
- $('#f-x').onclick=close;
- $('#f-s').onclick=async()=>{
-  const name=$('#f-n').value.trim(),p=$('#f-p').value;
-  if(!name||!p){$('#f-m').textContent='Ad ve fiyat gerekli';return}
-  $('#f-m').textContent='Kaydediliyor...';
-  try{
-   let img=it.img||'';const f=$('#f-i').files[0];if(f)img=await shrink(f);
-   const data={name,desc:$('#f-d').value.trim(),price:p+' TL',cat:$('#f-c').value,img,order:it.order??Date.now(),o:it.o||0};
-   if(it.id)await setDoc(doc(db,'items',it.id),data);else await addDoc(col,data);
-   close();await load();
-  }catch(e){$('#f-m').textContent='Kaydedilemedi: '+(e.code||e.message)}
- };
+  modal(`<h3>${it.id?'Ürünü Düzenle':'Yeni Ürün'}</h3><input id="f-n" placeholder="Ürün adı"><input id="f-d" placeholder="Açıklama"><input id="f-p" type="number" placeholder="Fiyat (TL)"><select id="f-c">${Object.entries(CATS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><label>Fotoğraf (dikey olsun):<input id="f-i" type="file" accept="image/*"></label><p id="f-m"></p><button id="f-s">Kaydet</button><button id="f-x">Vazgeç</button>`);
+  $('#f-n').value=it.name||'';$('#f-d').value=it.desc||'';$('#f-p').value=parseInt(it.price)||'';$('#f-c').value=it.cat||'kahvalti';
+  $('#f-x').onclick=close;
+  $('#f-s').onclick=async()=>{
+    const name=$('#f-n').value.trim(),p=$('#f-p').value;
+    if(!name||!p){$('#f-m').textContent='Ad ve fiyat gerekli';return}
+    $('#f-m').textContent='Kaydediliyor...';
+    try{
+      let img=it.img||'';const f=$('#f-i').files[0];if(f)img=await shrink(f);
+      const data={name,desc:$('#f-d').value.trim(),price:p+' TL',cat:$('#f-c').value,img,order:it.order??Date.now(),o:it.o||0};
+      if(it.id)await setDoc(doc(db,'items',it.id),data);else await addDoc(col,data);
+      close();
+    }catch(e){$('#f-m').textContent='Kaydedilemedi: '+(e.code||e.message)}
+  };
 }
-async function del(it){if(confirm(it.name+' silinsin mi?')){await deleteDoc(doc(db,'items',it.id));await load()}}
+
+async function del(it){if(confirm(it.name+' silinsin mi?'))await deleteDoc(doc(db,'items',it.id))}
+
+async function seed(){
+  for(const s of stat) await setDoc(doc(db,'items','orig-'+s.order),{...s,o:1});
+}
+
+onSnapshot(query(col,orderBy('order')),snap=>{
+  items=snap.docs.map(d=>({id:d.id,...d.data()}));
+  render();ui();
+},err=>console.error(err));
 
 $('#l-s').onclick=async()=>{
- const u=$('#l-u').value.trim().toLowerCase().replace(/\s+/g,'');
- try{await signInWithEmailAndPassword(auth,u+'@oktancafe.app',$('#l-p').value);$('#l-p').value='';$('#adm-t').checked=false;scrollTo(0,0)}
- catch(e){$('#l-m').textContent='Kullanıcı adı veya şifre hatalı'}
+  const u=$('#l-u').value.trim().toLowerCase().replace(/\s+/g,'');
+  try{await signInWithEmailAndPassword(auth,u+'@oktancafe.app',$('#l-p').value);$('#l-p').value='';$('#adm-t').checked=false;scrollTo(0,0)}
+  catch(e){$('#l-m').textContent='Kullanıcı adı veya şifre hatalı'}
 };
 $('#b-new').onclick=()=>form();
 $('#b-out').onclick=()=>signOut(auth);
-$('#b-seed').onclick=async()=>{if(confirm('Şimdiki menü veritabanına aktarılsın mı?')){for(const it of stat)await addDoc(col,{...it,o:1});await load()}};
-onAuthStateChanged(auth,u=>{admin=!!u;if(once)render();ui()});
-load();
-}else{document.getElementById('l-s').onclick=()=>{document.getElementById('l-m').textContent='Yönetici paneli henüz kurulmadı.'}}
+$('#b-seed').onclick=async()=>{if(confirm('Mevcut menü veritabanına yazılsın mı?'))await seed()};
+
+onAuthStateChanged(auth,u=>{admin=!!u;render();ui()});
+ui();
 </script>
 </body>
 </html>
