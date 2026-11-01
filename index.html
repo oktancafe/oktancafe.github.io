@@ -143,7 +143,7 @@ footer .owner { margin-top: 18px; color: white; font-size: 15px; }
     <p>CAFE & RESTORAN</p>
 </header>
 
-<div id="adm-bar" hidden><button id="b-new">+ Yeni Ürün</button><button id="b-seed" hidden>Mevcut Menüyü Aktar</button><button id="b-dedupe" hidden>Çiftleri Temizle</button><button id="b-out">Çıkış</button></div>
+<div id="adm-bar" hidden><button id="b-new">+ Yeni Ürün</button><button id="b-seed" hidden>Mevcut Menüyü Aktar</button><button id="b-dedupe" hidden>Eski ve Çift Kayıtları Temizle</button><button id="b-out">Çıkış</button></div>
 
 <main class="container">
 
@@ -440,7 +440,7 @@ const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=nu
 const staticNodes=[...menu.children].map(c=>c.cloneNode(true));
 const stat=[...menu.children].map((c,i)=>({cat:c.dataset.category,name:c.querySelector('h3').textContent,desc:c.querySelector('p').textContent,price:c.querySelector('.price').textContent,img:c.querySelector('img').src,order:i}));
 
-let items=[],admin=false,loaded=false;
+let items=[],legacy=[],admin=false,loaded=false;
 const hasSeed=()=>items.some(i=>i.o);
 
 function card(it){
@@ -463,6 +463,9 @@ function render(){
 }
 
 function dupes(){
+  return [...dupesOnly(),...legacy];
+}
+function dupesOnly(){
   const g={};items.forEach(i=>(g[i.name]=g[i.name]||[]).push(i));
   return Object.values(g).flatMap(list=>{
     if(list.length<2)return [];
@@ -507,7 +510,9 @@ async function seed(){
 }
 
 onSnapshot(query(col,orderBy('order')),snap=>{
-  items=snap.docs.map(d=>({id:d.id,...d.data()}));
+  const all=snap.docs.map(d=>({id:d.id,...d.data()}));
+  items=all.filter(i=>'o' in i);
+  legacy=all.filter(i=>!('o' in i));
   loaded=true;
   render();ui();
 },err=>console.error(err));
@@ -522,7 +527,7 @@ $('#b-out').onclick=()=>signOut(auth);
 $('#b-dedupe').onclick=async()=>{
   const d=dupes();
   if(!d.length)return;
-  if(!confirm(d.length+' çift kayıt silinecek. Devam edilsin mi?'))return;
+  if(!confirm(d.length+' eski veya çift kayıt silinecek. Devam edilsin mi?'))return;
   for(const it of d) await deleteDoc(doc(db,'items',it.id));
 };
 $('#b-seed').onclick=async()=>{if(confirm('Mevcut menü veritabanına yazılsın mı?'))await seed()};
