@@ -440,7 +440,7 @@ const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=nu
 const staticNodes=[...menu.children].map(c=>c.cloneNode(true));
 const stat=[...menu.children].map((c,i)=>({cat:c.dataset.category,name:c.querySelector('h3').textContent,desc:c.querySelector('p').textContent,price:c.querySelector('.price').textContent,img:c.querySelector('img').src,order:i}));
 
-let items=[],admin=false;
+let items=[],admin=false,loaded=false;
 const hasSeed=()=>items.some(i=>i.o);
 
 function card(it){
@@ -473,6 +473,7 @@ function dupes(){
 
 function ui(){
   $('#adm-wrap').hidden=admin;
+  if(!loaded){$('#adm-bar').hidden=true;return}
   $('#adm-bar').hidden=!admin;
   $('#b-seed').hidden=!admin||hasSeed();
   $('#b-dedupe').hidden=!admin||!dupes().length;
@@ -507,6 +508,7 @@ async function seed(){
 
 onSnapshot(query(col,orderBy('order')),snap=>{
   items=snap.docs.map(d=>({id:d.id,...d.data()}));
+  loaded=true;
   render();ui();
 },err=>console.error(err));
 
