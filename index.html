@@ -132,6 +132,11 @@ footer .owner { margin-top: 18px; color: white; font-size: 15px; }
 #adm-login input{padding:12px;border-radius:8px;border:0;font-size:16px}
 #adm-login button{padding:12px;border:0;border-radius:20px;background:#a77b42;color:#fff;font-weight:bold}
 #l-m{color:#ff9d8a;font-size:14px;margin:0}
+#mutfak{display:none;padding:16px;background:#1b1714;min-height:100vh;color:#fff;box-sizing:border-box}
+#mutfak h2{font-size:24px;margin-bottom:12px}
+body.mutfak{background:#1b1714}
+body.mutfak > *:not(#mutfak):not(#adm-modal):not(script){display:none !important}
+body.mutfak #mutfak{display:block}
 </style>
 </head>
 
@@ -425,6 +430,7 @@ footer .owner { margin-top: 18px; color: white; font-size: 15px; }
 
 
 <div id="cart-bar" hidden style="position:fixed;left:12px;right:90px;bottom:12px;background:#211c18;color:#fff;border-radius:25px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px;z-index:9;box-shadow:0 4px 15px #00000040"><span id="cart-info" style="font-size:14px"></span><button id="cart-open" style="background:#a77b42;color:#fff;border:0;border-radius:20px;padding:9px 14px;font-weight:bold">Sipariş</button></div>
+<div id="mutfak"></div>
 <div id="adm-modal" hidden></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -508,6 +514,35 @@ async function seed(){
 
 const MASA=(()=>{const m=new URLSearchParams(location.search).get('masa');return /^\d{1,3}$/.test(m||'')&&+m>=1&&+m<=200?+m:null})();
 let cart={},orders=[],ordOpen=false,ordUnsub=null,lastCount=-1;
+const EKRAN=new URLSearchParams(location.search).get('ekran')==='mutfak';
+function renderKitchen(){
+  const box=$('#mutfak');
+  box.replaceChildren();
+  box.append(el('h2',null,'Mutfak · Bekleyen '+orders.length+' sipariş'));
+  const sb=el('button',null,'🔔 Sesi Aç / Test');sb.style.cssText='padding:10px 16px;border:0;border-radius:10px;background:#a77b42;color:#fff;font-weight:bold;margin-bottom:12px';
+  sb.onclick=()=>{unlockSound();setTimeout(beep,300)};box.append(sb);
+  if(!orders.length){box.append(el('p',null,'Bekleyen sipariş yok.'));return}
+  const grid=el('div',null);
+  grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px';
+  orders.forEach(o=>{
+    const c=el('div',null);
+    c.style.cssText='background:#fff;color:#222;border-radius:12px;padding:14px;border-left:8px solid #a77b42';
+    const t=o.created?new Date(o.created.seconds*1000).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'}):'';
+    const h=el('div',null,'MASA '+o.masa);h.style.cssText='font-size:30px;font-weight:bold';
+    c.append(h,el('div',null,t));
+    (o.items||[]).forEach(i=>{const r=el('div',null,i.qty+' x '+i.name);r.style.cssText='font-size:20px;margin:4px 0';c.append(r)});
+    const b=el('button',null,stageLabel(o));
+    b.style.cssText='margin-top:10px;width:100%;padding:12px;font-size:18px;border:0;border-radius:10px;background:#211c18;color:#fff;font-weight:bold';
+    b.onclick=()=>nextStage(o);
+    c.append(b);grid.append(c);
+  });
+  box.append(grid);
+}
+function kitchenMode(){
+  const on=EKRAN&&admin;
+  document.body.classList.toggle('mutfak',on);
+  if(on)renderKitchen();
+}
 const priceNum=p=>parseInt(String(p).replace(/\D/g,''))||0;
 const cartTotal=()=>Object.values(cart).reduce((s,c)=>s+c.price*c.qty,0);
 const cartCount=()=>Object.values(cart).reduce((s,c)=>s+c.qty,0);
@@ -543,11 +578,13 @@ function renderCartModal(){
   $('#cs').onclick=sendOrder;
 }
 async function sendOrder(){
+  unlockSound();
   const items=Object.values(cart).map(c=>({name:c.name,qty:c.qty,price:c.price}));
   if(!items.length)return;
   $('#cs').disabled=true;
   try{
-    await addDoc(collection(db,'siparisler'),{masa:MASA,items,total:cartTotal(),status:'yeni',created:serverTimestamp()});
+    const ref=await addDoc(collection(db,'siparisler'),{masa:MASA,items,total:cartTotal(),status:'yeni',created:serverTimestamp()});
+    trackOrder(ref.id);
     cart={};updCart();
     modal('<h3>Siparişiniz alındı</h3><p>Masa '+MASA+' için siparişiniz mutfağa iletildi. Afiyet olsun.</p><button id="cx">Tamam</button>');
     $('#cx').onclick=close;
@@ -556,14 +593,48 @@ async function sendOrder(){
     $('#cs').disabled=false;
   }
 }
+const beepAudio=new Audio("data:audio/wav;base64,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");
+let soundOn=false;
+function unlockSound(){
+  if(soundOn)return;
+  beepAudio.play().then(()=>{beepAudio.pause();beepAudio.currentTime=0;soundOn=true}).catch(()=>{});
+}
 function beep(){
-  try{
-    const a=new (window.AudioContext||window.webkitAudioContext)();
-    const o=a.createOscillator(),g=a.createGain();
-    o.frequency.value=880;o.connect(g);g.connect(a.destination);
-    g.gain.setValueAtTime(.3,a.currentTime);
-    o.start();o.stop(a.currentTime+.4);
-  }catch(e){}
+  try{beepAudio.currentTime=0;beepAudio.play().catch(()=>{})}catch(e){}
+}
+let myOrderUnsub=null,lastStatus=null;
+function trackOrder(id){
+  if(myOrderUnsub)myOrderUnsub();
+  lastStatus=null;
+  localStorage.setItem('oktanSiparis',id);
+  myOrderUnsub=onSnapshot(doc(db,'siparisler',id),snap=>{
+    const d=snap.data();
+    if(!d)return;
+    const first=lastStatus===null;
+    if(d.status===lastStatus)return;
+    lastStatus=d.status;
+    if(first)return;
+    if(d.status==='hazirlaniyor'){
+      beep();showMsg('Siparişiniz hazırlanıyor','Masa '+MASA+' siparişiniz mutfakta hazırlanıyor.');
+    }
+    if(d.status==='hazir'){
+      beep();showMsg('Siparişiniz hazır','Masa '+MASA+' siparişiniz hazır, servis edilecek. Afiyet olsun.');
+    }
+    if(d.status==='kapali')stopTrack();
+  },err=>console.error(err));
+}
+function stopTrack(){
+  if(myOrderUnsub){myOrderUnsub();myOrderUnsub=null}
+  localStorage.removeItem('oktanSiparis');
+}
+function stageLabel(o){return o.status==='hazirlaniyor'?'Hazır':'Hazırlanıyor'}
+function nextStage(o){
+  const next=o.status==='hazirlaniyor'?'hazir':'hazirlaniyor';
+  return updateDoc(doc(db,'siparisler',o.id),{status:next});
+}
+function showMsg(t,p){
+  modal('<h3>'+t+'</h3><p>'+p+'</p><button id="cx">Tamam</button>');
+  $('#cx').onclick=close;
 }
 function renderOrders(){
   ordOpen=true;
@@ -578,21 +649,22 @@ function renderOrders(){
     card.append(el('b',null,'Masa '+o.masa+'  '+t));
     (o.items||[]).forEach(i=>card.append(el('div',null,i.qty+' x '+i.name)));
     card.append(el('div',null,'Toplam: '+o.total+' TL'));
-    const b=el('button',null,'Hazırlandı');
-    b.onclick=()=>updateDoc(doc(db,'siparisler',o.id),{status:'kapali'});
+    const b=el('button',null,stageLabel(o));
+    b.onclick=()=>nextStage(o);
     card.append(b);
     box.append(card);
   });
 }
 function listenOrders(){
   if(ordUnsub)return;
-  ordUnsub=onSnapshot(query(collection(db,'siparisler'),where('status','==','yeni')),snap=>{
+  ordUnsub=onSnapshot(query(collection(db,'siparisler'),where('status','in',['yeni','hazirlaniyor'])),snap=>{
     const n=snap.size;
     orders=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.created?.seconds||0)-(b.created?.seconds||0));
     if(lastCount>=0&&n>lastCount)beep();
     lastCount=n;
     $('#b-orders').textContent='Siparişler ('+n+')';
     if(ordOpen)renderOrders();
+    if(document.body.classList.contains('mutfak'))renderKitchen();
   },err=>console.error(err));
 }
 function stopOrders(){
@@ -628,10 +700,13 @@ $('#b-reset').onclick=()=>{
 
 $('#b-out').onclick=()=>signOut(auth);
 
-onAuthStateChanged(auth,u=>{admin=!!u;render();ui();if(admin)listenOrders();else stopOrders()});
+onAuthStateChanged(auth,u=>{admin=!!u;render();ui();if(admin)listenOrders();else stopOrders();kitchenMode()});
 $('#b-orders').onclick=()=>renderOrders();
 $('#cart-open').onclick=()=>{if(cartCount())renderCartModal()};
 if(MASA)document.body.style.paddingBottom='90px';
+document.addEventListener('pointerdown',unlockSound);
+const savedOrder=localStorage.getItem('oktanSiparis');
+if(MASA&&savedOrder)trackOrder(savedOrder);
 updCart();
 ui();
 </script>
